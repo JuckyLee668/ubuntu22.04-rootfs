@@ -1,0 +1,2 @@
+SUBSYSTEM=="sound", ATTR{id}=="rockchiphdmi", ENV{SOUND_DESCRIPTION}="HDMI-Audio"
+SUBSYSTEM=="sound", ATTR{id}=="rockchiprk809", ENV{SOUND_DESCRIPTION}="RK809-Audio"

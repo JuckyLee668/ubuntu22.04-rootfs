@@ -1,0 +1,1 @@
+ACTION=="change", SUBSYSTEM=="rfkill", ENV{RFKILL_TYPE}=="bluetooth", ENV{RFKILL_STATE}=="1", ENV{ID_RFKILL}="1", RUN+="/bin/systemd-run --no-block --collect --quiet /usr/local/bin/monitor-bluetooth.sh"
