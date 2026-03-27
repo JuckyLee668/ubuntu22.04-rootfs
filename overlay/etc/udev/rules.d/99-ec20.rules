@@ -1,0 +1,2 @@
+# EC20-4G modem rule
+SUBSYSTEM=="net", ACTION=="add", ATTRS{idVendor}=="2c7c", ATTRS{idProduct}=="0125", NAME="ec20"
