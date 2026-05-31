@@ -75,7 +75,7 @@ jobs:
       
       - name: Force clean previous build
         run: |
-          cd ${{ github.workspace }}/ubuntu
+          cd ${{ github.workspace }}
           echo "Starting force cleanup of previous build artifacts..."
           
           # 强制卸载所有可能的挂载点（使用-l选项进行lazy卸载）
@@ -111,21 +111,21 @@ jobs:
       
       - name: Build base rootfs
         run: |
-          cd ${{ github.workspace }}/ubuntu
+          cd ${{ github.workspace }}
           export GUI=${{ steps.params.outputs.build_type }}
           echo "Building base Ubuntu rootfs with GUI=${GUI}"
           sudo -E bash ./mk-base-ubuntu.sh 2>&1 | tee build.log
       
       - name: Build Ubuntu rootfs with packages
         run: |
-          cd ${{ github.workspace }}/ubuntu
+          cd ${{ github.workspace }}
           export GUI=${{ steps.params.outputs.build_type }}
           echo "Building Ubuntu rootfs with packages and drivers"
           sudo -E bash ./mk-ubuntu-rootfs.sh 2>&1 | tee -a build.log
       
       - name: Generate tarball
         run: |
-          cd ${{ github.workspace }}/ubuntu
+          cd ${{ github.workspace }}
           echo "Generating ubuntu.tar.gz from rootfs"
           
           # 查找生成的rootfs目录
@@ -159,7 +159,7 @@ jobs:
       
       - name: Verify tarball
         run: |
-          cd ${{ github.workspace }}/ubuntu
+          cd ${{ github.workspace }}
           if [ -f ubuntu.tar.gz ]; then
             echo "Tarball verification:"
             tar -tzf ubuntu.tar.gz | head -20
@@ -174,15 +174,15 @@ jobs:
       
       - name: Generate checksum
         run: |
-          cd ${{ github.workspace }}/ubuntu
+          cd ${{ github.workspace }}
           sha256sum ubuntu.tar.gz > ubuntu.tar.gz.sha256
           cat ubuntu.tar.gz.sha256
       
       - name: Copy artifacts to workspace root
         run: |
-          cp ${{ github.workspace }}/ubuntu/ubuntu.tar.gz ${{ github.workspace }}/
-          cp ${{ github.workspace }}/ubuntu/ubuntu.tar.gz.sha256 ${{ github.workspace }}/
-          cp ${{ github.workspace }}/ubuntu/build.log ${{ github.workspace }}/
+          cp ${{ github.workspace }}/ubuntu.tar.gz ${{ github.workspace }}/
+          cp ${{ github.workspace }}/ubuntu.tar.gz.sha256 ${{ github.workspace }}/
+          cp ${{ github.workspace }}/build.log ${{ github.workspace }}/
       
       - name: Create Release
         if: github.event_name == 'push' || github.event.inputs.create_release == 'true'
@@ -235,6 +235,6 @@ jobs:
       - name: Clean up
         if: always()
         run: |
-          cd ${{ github.workspace }}/ubuntu
+          cd ${{ github.workspace }}
           echo "Cleaning up build artifacts..."
           sudo -E bash ./clean-build.sh || true
