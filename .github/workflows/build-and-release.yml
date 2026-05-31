@@ -180,12 +180,6 @@ jobs:
           sha256sum ubuntu.tar.gz > ubuntu.tar.gz.sha256
           cat ubuntu.tar.gz.sha256
       
-      - name: Copy artifacts to workspace root
-        run: |
-          cp ${{ github.workspace }}/ubuntu.tar.gz ${{ github.workspace }}/
-          cp ${{ github.workspace }}/ubuntu.tar.gz.sha256 ${{ github.workspace }}/
-          cp ${{ github.workspace }}/build.log ${{ github.workspace }}/
-      
       - name: Create Release
         if: github.event_name == 'push' || github.event.inputs.create_release == 'true'
         uses: softprops/action-gh-release@v1
