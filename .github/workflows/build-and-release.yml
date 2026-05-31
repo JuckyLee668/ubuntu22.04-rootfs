@@ -1,0 +1,172 @@
+name: Build and Release Ubuntu Image
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'console'
+        type: choice
+        options:
+          - desktop
+          - console
+      create_release:
+        description: 'Create release'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set build parameters
+        id: params
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            BUILD_TYPE=${{ github.event.inputs.build_type }}
+            VERSION=${{ github.run_number }}
+          else
+            BUILD_TYPE=console
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "build_type=${BUILD_TYPE}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Build type: ${BUILD_TYPE}"
+          echo "Version: ${VERSION}"
+      
+      - name: Check host environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            git \
+            wget \
+            curl \
+            debootstrap \
+            qemu-user-static \
+            binfmt-support \
+            dosfstools \
+            mtools \
+            parted \
+            fdisk \
+            e2fsprogs \
+            sudo \
+            python3 \
+            python3-pip
+          
+          sudo pip3 install pyelftools
+          sudo ln -sf /usr/bin/python3 /usr/bin/python
+      
+      - name: Prepare sudo environment
+        run: |
+          sudo sed -i -e '/\%sudo/ c \%sudo ALL=(ALL) NOPASSWD: ALL' /etc/sudoers
+          sudo usermod -a -G sudo $USER
+      
+      - name: Create output directory
+        run: |
+          mkdir -p build-output
+      
+      - name: Build base rootfs
+        run: |
+          cd ${{ github.workspace }}
+          export GUI=${{ steps.params.outputs.build_type }}
+          echo "Building base Ubuntu rootfs with GUI=${GUI}"
+          sudo -E bash ./mk-base-ubuntu.sh 2>&1 | tee build.log
+      
+      - name: Build Ubuntu rootfs with packages
+        run: |
+          cd ${{ github.workspace }}
+          export GUI=${{ steps.params.outputs.build_type }}
+          echo "Building Ubuntu rootfs with packages and drivers"
+          sudo -E bash ./mk-ubuntu-rootfs.sh 2>&1 | tee -a build.log
+      
+      - name: Generate image
+        run: |
+          cd ${{ github.workspace }}
+          echo "Generating ubuntu-jammy.img"
+          sudo -E bash ./mk-image.sh 2>&1 | tee -a build.log
+      
+      - name: Verify image
+        run: |
+          cd ${{ github.workspace }}
+          if [ -f ubuntu-jammy.img ]; then
+            ls -lh ubuntu-jammy.img
+            file ubuntu-jammy.img
+            echo "Image generated successfully!"
+          else
+            echo "Error: ubuntu-jammy.img not found!"
+            exit 1
+          fi
+      
+      - name: Compress image
+        run: |
+          cd ${{ github.workspace }}
+          echo "Compressing image..."
+          sudo chown $USER:$USER ubuntu-jammy.img
+          gzip -v ubuntu-jammy.img
+          ls -lh ubuntu-jammy.img.gz
+      
+      - name: Generate checksum
+        run: |
+          cd ${{ github.workspace }}
+          sha256sum ubuntu-jammy.img.gz > ubuntu-jammy.img.gz.sha256
+          cat ubuntu-jammy.img.gz.sha256
+      
+      - name: Create Release
+        if: github.event_name == 'push' || github.event.inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ubuntu-jammy.img.gz
+            ubuntu-jammy.img.gz.sha256
+            build.log
+          body: |
+            ## Build Information
+            - **Version**: ${{ steps.params.outputs.version }}
+            - **Build Type**: ${{ steps.params.outputs.build_type }}
+            - **Build Date**: ${{ github.event.head_commit.timestamp }}
+            - **Commit**: ${{ github.sha }}
+            
+            ## Files
+            - `ubuntu-jammy.img.gz` - Compressed Ubuntu Jammy image
+            - `ubuntu-jammy.img.gz.sha256` - SHA256 checksum
+            - `build.log` - Build output log
+            
+            ### Verification
+            ```bash
+            sha256sum -c ubuntu-jammy.img.gz.sha256
+            gunzip ubuntu-jammy.img.gz
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: |
+            ubuntu-jammy.img.gz
+            ubuntu-jammy.img.gz.sha256
+            build.log
+          retention-days: 30
+      
+      - name: Clean up
+        if: always()
+        run: |
+          cd ${{ github.workspace }}
+          echo "Cleaning up build artifacts..."
+          sudo -E bash ./clean-build.sh || true
