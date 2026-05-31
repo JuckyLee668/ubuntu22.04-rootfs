@@ -128,15 +128,17 @@ jobs:
           cd ${{ github.workspace }}
           echo "Generating ubuntu.tar.gz from rootfs"
           
-          # 查找生成的rootfs目录
+          # 查找生成的rootfs目录 (build scripts create 'binary' directory)
           ROOTFS_DIR=""
-          if [ -d "rootfs" ]; then
+          if [ -d "binary" ]; then
+            ROOTFS_DIR="binary"
+          elif [ -d "rootfs" ]; then
             ROOTFS_DIR="rootfs"
           elif [ -d "ubuntu-rootfs" ]; then
             ROOTFS_DIR="ubuntu-rootfs"
           else
-            # 尝试从构建脚本中找到的目录
-            ROOTFS_DIR=$(find . -maxdepth 2 -type d -name "*rootfs*" 2>/dev/null | head -1)
+            # Try to find any rootfs-like directory
+            ROOTFS_DIR=$(find . -maxdepth 1 -type d -name "*rootfs*" -o -name "binary" 2>/dev/null | head -1)
           fi
           
           if [ -z "$ROOTFS_DIR" ] || [ ! -d "$ROOTFS_DIR" ]; then
