@@ -73,6 +73,38 @@ jobs:
           sudo sed -i -e '/\%sudo/ c \%sudo ALL=(ALL) NOPASSWD: ALL' /etc/sudoers
           sudo usermod -a -G sudo $USER
       
+      - name: Force clean previous build
+        run: |
+          cd ${{ github.workspace }}
+          echo "Starting force cleanup of previous build artifacts..."
+          
+          # 强制卸载所有可能的挂载点（使用-l选项进行lazy卸载）
+          echo "Unmounting mount points..."
+          sudo umount -l binary/proc 2>/dev/null || echo "binary/proc not mounted or unmount failed"
+          sudo umount -l binary/sys 2>/dev/null || echo "binary/sys not mounted or unmount failed"
+          sudo umount -l binary/dev/pts 2>/dev/null || echo "binary/dev/pts not mounted or unmount failed"
+          sudo umount -l binary/dev 2>/dev/null || echo "binary/dev not mounted or unmount failed"
+          sudo umount -l binary 2>/dev/null || echo "binary not mounted or unmount failed"
+          
+          # 等待卸载完成
+          sleep 2
+          
+          # 确认卸载状态
+          echo "Verifying mount points..."
+          mountpoint -q binary/proc && echo "WARNING: binary/proc still mounted" || echo "✓ binary/proc unmounted"
+          mountpoint -q binary/sys && echo "WARNING: binary/sys still mounted" || echo "✓ binary/sys unmounted"
+          mountpoint -q binary/dev/pts && echo "WARNING: binary/dev/pts still mounted" || echo "✓ binary/dev/pts unmounted"
+          mountpoint -q binary/dev && echo "WARNING: binary/dev still mounted" || echo "✓ binary/dev unmounted"
+          
+          # 删除残留目录和文件
+          echo "Removing previous build artifacts..."
+          sudo rm -rf binary 2>/dev/null || echo "binary directory not found"
+          sudo rm -rf rootfs 2>/dev/null || echo "rootfs directory not found"
+          sudo rm -rf ubuntu-base-*.tar.gz 2>/dev/null || echo "ubuntu-base-*.tar.gz not found"
+          sudo rm -rf ubuntu22.04.5-base-*.tar.gz 2>/dev/null || echo "ubuntu22.04.5-base-*.tar.gz not found"
+          
+          echo "Force cleanup completed successfully"
+      
       - name: Create output directory
         run: |
           mkdir -p build-output
