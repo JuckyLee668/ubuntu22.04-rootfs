@@ -1,4 +1,4 @@
-name: Build and Release Ubuntu Image
+name: Build and Release Ubuntu RootFS
 
 on:
   push:
@@ -91,45 +91,65 @@ jobs:
           echo "Building Ubuntu rootfs with packages and drivers"
           sudo -E bash ./mk-ubuntu-rootfs.sh 2>&1 | tee -a build.log
       
-      - name: Generate image
+      - name: Generate tarball
         run: |
           cd ${{ github.workspace }}
-          echo "Generating ubuntu-jammy.img"
-          sudo -E bash ./mk-image.sh 2>&1 | tee -a build.log
-      
-      - name: Verify image
-        run: |
-          cd ${{ github.workspace }}
-          if [ -f ubuntu-jammy.img ]; then
-            ls -lh ubuntu-jammy.img
-            file ubuntu-jammy.img
-            echo "Image generated successfully!"
+          echo "Generating ubuntu.tar.gz from rootfs"
+          
+          # 查找生成的rootfs目录
+          ROOTFS_DIR=""
+          if [ -d "rootfs" ]; then
+            ROOTFS_DIR="rootfs"
+          elif [ -d "ubuntu-rootfs" ]; then
+            ROOTFS_DIR="ubuntu-rootfs"
           else
-            echo "Error: ubuntu-jammy.img not found!"
+            # 尝试从构建脚本中找到的目录
+            ROOTFS_DIR=$(find . -maxdepth 2 -type d -name "*rootfs*" 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$ROOTFS_DIR" ] || [ ! -d "$ROOTFS_DIR" ]; then
+            echo "Error: rootfs directory not found!"
             exit 1
           fi
+          
+          echo "Found rootfs directory: $ROOTFS_DIR"
+          ls -lh "$ROOTFS_DIR" | head -20
+          
+          # 创建tar包，文件根目录直接包含ubuntu文件系统内容
+          sudo tar -czf ubuntu.tar.gz -C "$ROOTFS_DIR" . 2>&1 | tee -a build.log
+          
+          # 修改所有权
+          sudo chown $USER:$USER ubuntu.tar.gz
+          ls -lh ubuntu.tar.gz
       
-      - name: Compress image
+      - name: Verify tarball
         run: |
           cd ${{ github.workspace }}
-          echo "Compressing image..."
-          sudo chown $USER:$USER ubuntu-jammy.img
-          gzip -v ubuntu-jammy.img
-          ls -lh ubuntu-jammy.img.gz
+          if [ -f ubuntu.tar.gz ]; then
+            echo "Tarball verification:"
+            tar -tzf ubuntu.tar.gz | head -20
+            echo "..."
+            echo "Total files in tarball:"
+            tar -tzf ubuntu.tar.gz | wc -l
+            echo "Tarball generated successfully!"
+          else
+            echo "Error: ubuntu.tar.gz not found!"
+            exit 1
+          fi
       
       - name: Generate checksum
         run: |
           cd ${{ github.workspace }}
-          sha256sum ubuntu-jammy.img.gz > ubuntu-jammy.img.gz.sha256
-          cat ubuntu-jammy.img.gz.sha256
+          sha256sum ubuntu.tar.gz > ubuntu.tar.gz.sha256
+          cat ubuntu.tar.gz.sha256
       
       - name: Create Release
         if: github.event_name == 'push' || github.event.inputs.create_release == 'true'
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ubuntu-jammy.img.gz
-            ubuntu-jammy.img.gz.sha256
+            ubuntu.tar.gz
+            ubuntu.tar.gz.sha256
             build.log
           body: |
             ## Build Information
@@ -139,14 +159,21 @@ jobs:
             - **Commit**: ${{ github.sha }}
             
             ## Files
-            - `ubuntu-jammy.img.gz` - Compressed Ubuntu Jammy image
-            - `ubuntu-jammy.img.gz.sha256` - SHA256 checksum
+            - `ubuntu.tar.gz` - Ubuntu Jammy RootFS tarball (根目录直接包含文件系统内容)
+            - `ubuntu.tar.gz.sha256` - SHA256 checksum
             - `build.log` - Build output log
             
-            ### Verification
+            ## Usage (使用方法)
             ```bash
-            sha256sum -c ubuntu-jammy.img.gz.sha256
-            gunzip ubuntu-jammy.img.gz
+            # 验证文件完整性
+            sha256sum -c ubuntu.tar.gz.sha256
+            
+            # 解压到指定目录
+            mkdir -p ubuntu-rootfs
+            tar -xzf ubuntu.tar.gz -C ubuntu-rootfs
+            
+            # 或直接解压到当前目录
+            tar -xzf ubuntu.tar.gz
             ```
           draft: false
           prerelease: false
@@ -159,8 +186,8 @@ jobs:
         with:
           name: build-artifacts
           path: |
-            ubuntu-jammy.img.gz
-            ubuntu-jammy.img.gz.sha256
+            ubuntu.tar.gz
+            ubuntu.tar.gz.sha256
             build.log
           retention-days: 30
       
